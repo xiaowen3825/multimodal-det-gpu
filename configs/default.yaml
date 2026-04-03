@@ -1,0 +1,70 @@
+# =============================================================================
+# 默认训练配置 (GPU版本)
+# =============================================================================
+
+# --- 数据集 ---
+data:
+  dataset: "coco"
+  root: "./datasets/coco"
+  train_ann: "annotations/instances_train2017.json"
+  val_ann: "annotations/instances_val2017.json"
+  train_img_dir: "train2017"
+  val_img_dir: "val2017"
+  subset_ratio: 1.0           # GPU训练可使用全量数据
+  img_size: 640
+  num_workers: 8
+  prefetch_factor: 4
+
+# --- 数据增强 ---
+augmentation:
+  mosaic_prob: 0.5
+  mixup_prob: 0.1
+  hsv_h: 0.015
+  hsv_s: 0.7
+  hsv_v: 0.4
+  flip_lr: 0.5
+  scale: [0.5, 1.5]
+  translate: 0.1
+
+# --- 训练 ---
+train:
+  epochs: 50
+  batch_size: 16              # GPU可使用更大batch_size
+  gradient_accumulation: 1    # GPU不需要梯度累积，直接大batch
+  warmup_epochs: 3
+  initial_lr: 0.001
+  final_lr: 0.0001
+  weight_decay: 0.0005
+  momentum: 0.937
+  scheduler: "cosine"
+  clip_grad_norm: 10.0
+
+# --- GPU优化 ---
+gpu:
+  device: "cuda"              # 使用CUDA GPU
+  enable_compile: false       # torch.compile加速（需要PyTorch 2.0+）
+  compile_mode: "reduce-overhead"
+  enable_amp: true            # 启用混合精度训练 (FP16)
+  amp_dtype: "float16"        # 混合精度类型: float16 或 bfloat16
+  pin_memory: true            # 启用pin_memory加速数据传输
+  cudnn_benchmark: true       # 启用cuDNN benchmark自动选择最优算法
+  sync_bn: false              # 单卡不需要SyncBN
+
+# --- 检查点 ---
+checkpoint:
+  save_dir: "./runs"
+  save_interval: 5            # 每5个epoch保存
+  keep_last: 3                # 保留最近3个checkpoint
+  save_best: true
+
+# --- 日志 ---
+logging:
+  log_dir: "./runs/logs"
+  log_interval: 50            # 每50步打印日志
+  use_tensorboard: true
+  use_wandb: false
+  project_name: "multimodal-det"
+  experiment_name: "default"
+
+# --- 随机种子 ---
+seed: 42

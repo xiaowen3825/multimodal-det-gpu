@@ -1,0 +1,82 @@
+# =============================================================================
+# AGCMA + YOLO-World-S 模型配置 (GPU版本)
+# =============================================================================
+
+# 继承默认配置
+_base_: "default.yaml"
+
+# --- 模型结构 ---
+model:
+  type: "MultiModalDetector"
+
+  # 视觉Backbone: YOLOv8-S
+  backbone:
+    type: "YOLOv8Backbone"
+    variant: "s"              # s=small
+    width_multiple: 0.50      # 通道缩放因子
+    depth_multiple: 0.33      # 深度缩放因子
+    out_channels: [128, 256, 512]  # C3/C4/C5输出通道数
+    pretrained: true          # 加载ImageNet预训练权重
+
+  # 文本编码器
+  text_encoder:
+    type: "LightTextEncoder"  # 使用蒸馏后的轻量编码器
+    vocab_size: 49408         # CLIP tokenizer词汇量
+    embed_dim: 512            # 文本嵌入维度
+    num_layers: 4             # Transformer层数
+    num_heads: 8
+    hidden_dim: 2048          # FFN隐藏维度
+    max_length: 77            # 最大token长度
+    pretrained: "./runs/distill/best_text_encoder.pth"   # 蒸馏权重路径
+
+  # 融合网络: AGCMA-PAN (核心创新)
+  neck:
+    type: "AGCMA_PAN"
+    in_channels: [128, 256, 512]   # 来自backbone的特征通道
+    text_dim: 512                   # 文本嵌入维度
+    out_channels: [128, 256, 512]   # 输出通道
+
+    # AGCMA模块参数
+    agcma:
+      dw_kernel: 3            # 深度可分离卷积核大小
+      reduction: 4            # 通道注意力降维比
+      gate_bias: -1.0         # 门控初始偏置 (sigmoid(-1)≈0.27，初始少依赖文本)
+      use_residual: true      # 残差连接
+      dropout: 0.1            # 注意力dropout
+
+  # 检测头
+  head:
+    type: "DecoupledHead"
+    in_channels: [128, 256, 512]
+    num_classes: -1           # -1表示开放词汇(由文本决定)
+    reg_max: 16               # DFL回归最大值
+    strides: [8, 16, 32]     # 特征图步长
+    embed_dim: 512            # 分类嵌入维度(需与文本维度一致)
+
+  # 冻结策略
+  freeze:
+    backbone_stages: 3        # 冻结backbone前3个stage
+    text_encoder: true        # 冻结文本编码器
+
+# --- 损失函数 ---
+loss:
+  cls_weight: 1.0
+  box_weight: 7.5
+  dfl_weight: 1.5
+  cls_type: "bce"             # 二值交叉熵 (开放词汇)
+  box_type: "ciou"            # Complete IoU损失
+
+# --- 训练覆盖 ---
+train:
+  epochs: 50
+  batch_size: 16              # GPU可使用更大batch_size（根据显存调整，4090可用16-32）
+  gradient_accumulation: 1    # GPU不需要梯度累积
+  initial_lr: 0.001           # 大batch可适当增大学习率
+
+# --- 数据覆盖 ---
+data:
+  subset_ratio: 1.0           # GPU训练使用全量数据
+
+# --- 实验标记 ---
+logging:
+  experiment_name: "agcma_yoloworld_s_gpu"

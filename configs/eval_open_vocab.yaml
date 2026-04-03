@@ -1,0 +1,59 @@
+# =============================================================================
+# 开放词汇评估配置
+# =============================================================================
+
+_base_: "default.yaml"
+
+# --- 评估模式 ---
+eval:
+  mode: "open_vocabulary"
+
+  # COCO开放词汇设置 (OV-COCO标准划分)
+  # 48个base类用于训练，17个novel类用于零样本评估
+  base_classes: [
+    1, 2, 3, 4, 5, 6, 7, 9, 16, 17, 18, 19, 20, 21, 44, 62, 63, 64, 67,
+    72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 84, 85, 86, 87, 88, 89,
+    90, 92, 93, 95, 100, 107, 109, 112, 118, 119, 122, 125
+  ]
+  novel_classes: [
+    8, 10, 11, 13, 14, 15, 22, 23, 24, 25, 27, 28, 31, 32, 33, 34, 35,
+  ]
+
+  # 评估数据集
+  datasets:
+    - name: "coco_val"
+      ann_file: "annotations/instances_val2017.json"
+      img_dir: "val2017"
+      split: "all"            # 评估所有类别
+
+  # 评估指标
+  metrics:
+    - "AP"
+    - "AP50"
+    - "AP75"
+    - "AP_base"               # Base类AP
+    - "AP_novel"              # Novel类AP (零样本)
+    - "AR100"
+
+  # 效率指标
+  benchmark:
+    enabled: true
+    warmup_iters: 50
+    test_iters: 200
+    img_size: 640
+    report_params: true       # 报告参数量
+    report_flops: true        # 报告FLOPs
+
+  # NMS配置
+  nms:
+    score_threshold: 0.001
+    iou_threshold: 0.7
+    max_detections: 300
+
+# --- 可视化 ---
+visualization:
+  enabled: true
+  save_dir: "./runs/vis"
+  num_images: 50              # 可视化前50张图
+  show_gate_weights: true     # 可视化AGCMA门控权重
+  show_attention_map: true    # 可视化注意力图

@@ -1,0 +1,24 @@
+# 数据集（太大不上传）
+datasets/
+*.jpg
+*.png
+*.jpeg
+
+# 模型权重
+runs/distill/*.pth
+runs/*.pth
+*.onnx
+
+# Python缓存
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+
+# 日志
+runs/logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
