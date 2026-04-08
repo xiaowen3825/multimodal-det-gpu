@@ -1,0 +1,73 @@
+# =============================================================================
+# AGCMA + YOLO-World-S 模型配置
+# =============================================================================
+
+# 继承默认配置
+_base_: "default.yaml"
+
+# --- 模型结构 ---
+model:
+  type: "MultiModalDetector"
+
+  # 视觉Backbone: YOLOv8-S
+  backbone:
+    type: "YOLOv8Backbone"
+    variant: "s"              # s=small
+    width_multiple: 0.50      # 通道缩放因子
+    depth_multiple: 0.33      # 深度缩放因子
+    out_channels: [128, 256, 512]  # C3/C4/C5输出通道数
+    pretrained: true          # 加载ImageNet预训练权重
+
+  # 文本编码器: 使用CLIP预训练编码器保证语义质量
+  text_encoder:
+    type: "CLIPTextEncoder"
+    model_name: "openai/clip-vit-base-patch32"
+    embed_dim: 512
+    freeze: true
+    max_length: 77
+
+  # 融合网络: AGCMA-PAN (核心创新)
+  neck:
+    type: "AGCMA_PAN"
+    in_channels: [128, 256, 512]   # 来自backbone的特征通道
+    text_dim: 512                   # 文本嵌入维度
+    out_channels: [128, 256, 512]   # 输出通道
+
+    # AGCMA模块参数
+    agcma:
+      dw_kernel: 3            # 深度可分离卷积核大小
+      reduction: 4            # 通道注意力降维比
+      gate_bias: -1.0         # 门控初始偏置 (sigmoid(-1)≈0.27，初始少依赖文本)
+      use_residual: true      # 残差连接
+      dropout: 0.1            # 注意力dropout
+
+  # 检测头
+  head:
+    type: "DecoupledHead"
+    in_channels: [128, 256, 512]
+    num_classes: -1           # -1表示开放词汇(由文本决定)
+    reg_max: 16               # DFL回归最大值
+    strides: [8, 16, 32]     # 特征图步长
+
+  # 冻结策略
+  freeze:
+    backbone_stages: 3        # 冻结backbone前3个stage
+    text_encoder: true        # 冻结文本编码器
+
+# --- 损失函数 ---
+loss:
+  cls_weight: 1.0
+  box_weight: 7.5
+  dfl_weight: 1.5
+  cls_type: "bce"             # 二值交叉熵 (开放词汇)
+  box_type: "ciou"            # Complete IoU损失
+
+# --- 训练覆盖 ---
+train:
+  epochs: 50
+  batch_size: 2
+  initial_lr: 0.0005          # 融合模块较小的学习率
+
+# --- 实验标记 ---
+logging:
+  experiment_name: "agcma_yoloworld_s"

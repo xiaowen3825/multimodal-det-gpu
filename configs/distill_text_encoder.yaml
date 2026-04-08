@@ -1,0 +1,48 @@
+# =============================================================================
+# 文本编码器蒸馏配置
+# =============================================================================
+
+_base_: "default.yaml"
+
+# --- Teacher模型 ---
+teacher:
+  type: "CLIPTextEncoder"
+  model_name: "openai/clip-vit-base-patch32"
+  embed_dim: 512
+  freeze: true                # Teacher始终冻结
+
+# --- Student模型 ---
+student:
+  type: "LightTextEncoder"
+  vocab_size: 49408
+  embed_dim: 512
+  num_layers: 4
+  num_heads: 8
+  hidden_dim: 2048
+  max_length: 77
+
+# --- 蒸馏配置 ---
+distill:
+  # 损失权重
+  feat_loss_weight: 1.0       # MSE特征损失权重
+  align_loss_weight: 0.5      # 对比对齐损失权重
+  temperature: 2.0            # 蒸馏温度
+
+  # 训练数据
+  text_data: "./datasets/cc3m_texts.txt"  # CC3M文本子集
+  num_samples: 100000         # 使用10万条文本
+
+# --- 训练覆盖 ---
+train:
+  epochs: 30
+  batch_size: 64              # 纯文本，可用较大batch
+  gradient_accumulation: 1
+  initial_lr: 0.001
+  final_lr: 0.00001
+
+# --- 实验标记 ---
+logging:
+  experiment_name: "distill_text_encoder"
+
+checkpoint:
+  save_dir: "./runs/distill"
