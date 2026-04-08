@@ -45,7 +45,11 @@ class Trainer:
         val_loader: Optional[DataLoader] = None,
         evaluator=None,
     ):
-        self.model = model
+        # 自动检测设备
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        logger.info(f"Using device: {self.device}")
+
+        self.model = model.to(self.device)
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.cfg = cfg
@@ -57,8 +61,15 @@ class Trainer:
         self.grad_accum = train_cfg.get("gradient_accumulation", 8)
         self.clip_grad_norm = train_cfg.get("clip_grad_norm", 10.0)
 
-        # CPU优化
-        self._setup_cpu_optimization(cfg.get("cpu", {}))
+        # GPU混合精度
+        self.use_amp = self.device.type == "cuda"
+        self.scaler = torch.amp.GradScaler("cuda") if self.use_amp else None
+
+        # CPU优化 (仅CPU时使用)
+        if self.device.type == "cpu":
+            self._setup_cpu_optimization(cfg.get("cpu", {}))
+        else:
+            self.use_bf16 = False
 
         # 优化器 & 调度器
         self.optimizer = build_optimizer(model, cfg)
@@ -181,12 +192,20 @@ class Trainer:
         self.optimizer.zero_grad()
 
         for step, batch in enumerate(self.train_loader):
-            images = batch["images"]
-            targets = batch["targets"]
+            images = batch["images"].to(self.device)
+            targets = [{k: v.to(self.device) if isinstance(v, torch.Tensor) else v
+                        for k, v in t.items()} for t in batch["targets"]]
             class_names = batch["class_names"]
 
-            # 前向传播 (可选BF16)
-            if self.use_bf16:
+            # 前向传播 (GPU AMP 或 CPU BF16)
+            if self.use_amp:
+                with torch.amp.autocast("cuda"):
+                    losses = self.model(
+                        images=images,
+                        text_prompts=class_names,
+                        targets=targets,
+                    )
+            elif self.use_bf16:
                 with torch.cpu.amp.autocast(dtype=torch.bfloat16):
                     losses = self.model(
                         images=images,
@@ -202,17 +221,29 @@ class Trainer:
 
             # 梯度累积
             loss = losses["total_loss"] / self.grad_accum
-            loss.backward()
+
+            if self.use_amp:
+                self.scaler.scale(loss).backward()
+            else:
+                loss.backward()
 
             # 累积够了才更新
             if (step + 1) % self.grad_accum == 0:
-                # 梯度裁剪
-                if self.clip_grad_norm > 0:
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), self.clip_grad_norm
-                    )
+                if self.use_amp:
+                    self.scaler.unscale_(self.optimizer)
+                    if self.clip_grad_norm > 0:
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), self.clip_grad_norm
+                        )
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    if self.clip_grad_norm > 0:
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), self.clip_grad_norm
+                        )
+                    self.optimizer.step()
 
-                self.optimizer.step()
                 self.scheduler.step()
                 self.optimizer.zero_grad()
                 self.global_step += 1

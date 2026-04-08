@@ -58,6 +58,7 @@ class Evaluator:
         """
         model.eval()
         names = class_names or self.class_names
+        device = next(model.parameters()).device
 
         all_predictions = []
         all_ground_truths = []
@@ -66,20 +67,20 @@ class Evaluator:
         start_time = time.time()
 
         for batch_idx, batch in enumerate(dataloader):
-            images = batch["images"]
+            images = batch["images"].to(device)
             targets = batch["targets"]
             img_ids = batch["img_ids"]
 
             # 推理
             outputs = model(images=images, text_prompts=names)
 
-            # 后处理每张图
+            # 后处理每张图 (移回CPU)
             for i in range(images.shape[0]):
-                cls_scores = outputs["cls_scores"][i]    # [A, N]
-                bbox_preds = outputs["bbox_preds"][i]    # [A, 4]
-                objectness = outputs["objectness"][i]    # [A, 1]
-                anchor_points = outputs["anchor_points"]  # [A, 2]
-                stride_tensor = outputs["stride_tensor"]  # [A, 1]
+                cls_scores = outputs["cls_scores"][i].cpu()    # [A, N]
+                bbox_preds = outputs["bbox_preds"][i].cpu()    # [A, 4]
+                objectness = outputs["objectness"][i].cpu()    # [A, 1]
+                anchor_points = outputs["anchor_points"].cpu()  # [A, 2]
+                stride_tensor = outputs["stride_tensor"].cpu()  # [A, 1]
 
                 # 解码预测
                 preds = self._postprocess(
