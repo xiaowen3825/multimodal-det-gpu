@@ -42,7 +42,7 @@ train:
 # --- CPU优化 ---
 cpu:
   num_threads: 0              # 0表示自动检测物理核心数
-  enable_compile: true        # torch.compile加速
+  enable_compile: false       # 关闭(与transformers CLIP不兼容)
   compile_mode: "reduce-overhead"
   enable_bf16: true           # Intel CPU bf16支持
   pin_memory: false
