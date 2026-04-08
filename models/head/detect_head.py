@@ -70,6 +70,7 @@ class DecoupledHead(nn.Module):
         num_classes: int = -1,
         reg_max: int = 16,
         strides: List[int] = [8, 16, 32],
+        embed_dim: int = 512,
         **kwargs,
     ):
         super().__init__()
@@ -78,10 +79,11 @@ class DecoupledHead(nn.Module):
         self.strides = strides
         self.nl = len(in_channels)  # 检测层数
         self.no_reg = 4 * reg_max   # 回归输出维度
+        self.embed_dim = embed_dim
 
         # 分类分支 (输出视觉embedding，用于和文本计算相似度)
         self.cls_convs = nn.ModuleList()
-        self.cls_proj = nn.ModuleList()  # 投影到文本空间
+        self.cls_proj = nn.ModuleList()  # 投影到统一的文本嵌入空间
 
         # 回归分支
         self.reg_convs = nn.ModuleList()
@@ -98,8 +100,8 @@ class DecoupledHead(nn.Module):
                     Conv(ch, ch, 3, 1),
                 )
             )
-            # 投影到text embedding空间 (将在forward时使用)
-            self.cls_proj.append(nn.Conv2d(ch, ch, 1, bias=False))
+            # 投影到统一的embed_dim维度 (与文本嵌入维度对齐)
+            self.cls_proj.append(nn.Conv2d(ch, embed_dim, 1, bias=False))
 
             # 回归分支: 2层conv + DFL预测
             self.reg_convs.append(
